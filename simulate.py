@@ -14,10 +14,10 @@ NUM_EPISODES = 1000
 MAX_EPISODE_STEPS = 1000
 RENDER_START_PERCENTAGE = 15
 for i_episode in range(NUM_EPISODES):
-    percentage = int(i_episode / NUM_EPISODES * 100)
+    percentage = round(i_episode / NUM_EPISODES * 100, 1)
     observation = env.reset()
     for t in range(MAX_EPISODE_STEPS):
-        if percentage > RENDER_START_PERCENTAGE:
+        if percentage >= RENDER_START_PERCENTAGE:
             env.render()
 
         obs = torch.from_numpy(observation).float().unsqueeze(0)
