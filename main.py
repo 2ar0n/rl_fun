@@ -27,7 +27,7 @@ control_size = int(env.action_space.n)
 if args.agent == "reinforce":
     net = reinforce.Reinforce(observation_size, [128], control_size)
 elif args.agent == "actor-critic":
-    net = actor_critic.ActorCritic(observation_size, [128], control_size, [128, 10])
+    net = actor_critic.ActorCritic(observation_size, [64], control_size, [64, 10])
 else:
     print(f"Agent type {args.agent} not found")
     sys.exit(1)
@@ -35,9 +35,10 @@ else:
 
 NUM_EPISODES = args.episodes
 MAX_EPISODE_STEPS = 1000
-for i_episode in range(NUM_EPISODES):
-    percentage = round(i_episode / NUM_EPISODES * 100, 1)
+for ep in range(NUM_EPISODES):
+    percentage = round(ep / NUM_EPISODES * 100, 1)
     observation = env.reset()
+    total_returns = 0
     for t in range(MAX_EPISODE_STEPS):
         if args.render:
             env.render()
@@ -47,10 +48,10 @@ for i_episode in range(NUM_EPISODES):
         observation, reward, done, _ = env.step(action.item())
         net.add_reward(reward)
 
+        total_returns += reward
         if done:
-            print(f"Episode finished after {t+1} timesteps")
-            print(f"Percentage: {percentage}")
+            loss = net.train_episode()
+            print(f"Progress: {ep}/{NUM_EPISODES} ({percentage}%); Episode duration: {t+1} steps; Total return: {total_returns}; Loss: {loss}")
             break
-    net.train_episode()
 
 env.close()

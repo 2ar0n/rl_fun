@@ -32,9 +32,9 @@ class ActorCritic:
         self.estimated_values = []
 
         self.optimizer_policy = optim.Adam(self.policy.parameters(), lr=0.01)
-        self.optimizer_policy.zero_grad()   # zero the gradient buffers
+        self.optimizer_policy.zero_grad()
         self.optimizer_value = optim.Adam(self.policy.parameters(), lr=0.01)
-        self.optimizer_value.zero_grad()   # zero the gradient buffers
+        self.optimizer_value.zero_grad()
         self.discount_factor = 0.99
 
     def forward_train(self, observation):
@@ -42,8 +42,7 @@ class ActorCritic:
         m = Categorical(inference)
         action = m.sample()
         self.probs.append(m.log_prob(action))
-        estimated_value = self.value.forward(observation)
-        self.estimated_values.append(estimated_value)
+        self.estimated_values.append(self.value.forward(observation))
         return action
 
     def forward(self, observation):
@@ -54,28 +53,19 @@ class ActorCritic:
         self.rewards.append(reward)
 
     def train_episode(self):
-        R = 0.0
-        returns = []
-        for r in self.rewards[::-1]:
-            R = R * self.discount_factor + r
-            returns.append(R)
-        returns.reverse()
-        returns = torch.tensor(returns)
-        eps = np.finfo(np.float32).eps.item()
-        returns = (returns - returns.mean()) / (returns.std() + eps)
-
+        returns = self.calculate_returns()
         policy_loss = []
         action_value_loss = []
         for idx in range(0, len(self.probs)):
             log_prob_action = self.probs[idx]
-            target_return = returns[idx]
+            actual_return = returns[idx]
             estimated_value = self.estimated_values[idx]
 
-            advantage = target_return.item() - estimated_value.item()
+            advantage = actual_return.item() - estimated_value.item()
             policy_loss.append(-advantage * log_prob_action)
 
             loss_fn = torch.nn.MSELoss()
-            action_value_loss.append(loss_fn(target_return, estimated_value))
+            action_value_loss.append(loss_fn(actual_return.view([1,1]), estimated_value))
 
         self.optimizer_policy.zero_grad()
         policy_loss = torch.cat(policy_loss).sum()
@@ -87,9 +77,25 @@ class ActorCritic:
         action_value_loss.backward()
         self.optimizer_value.step()
 
+        loss = (policy_loss.item() + action_value_loss.item()) / len(self.probs)
+
         self.probs = []
         self.rewards = []
         self.estimated_values = []
+
+        return loss
+
+    def calculate_returns(self):
+        R = 0.0
+        returns = []
+        for r in self.rewards[::-1]:
+            R = R * self.discount_factor + r
+            returns.append(R)
+        returns.reverse()
+        returns = torch.tensor(returns)
+        eps = np.finfo(np.float32).eps.item()
+        return (returns - returns.mean()) / (returns.std() + eps)
+
 
 
 def main():

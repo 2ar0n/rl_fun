@@ -21,7 +21,7 @@ class Reinforce:
         self.probs = []
         self.rewards = []
         self.optimizer = optim.Adam(self.policy.parameters(), lr=0.01)
-        self.optimizer.zero_grad()   # zero the gradient buffers
+        self.optimizer.zero_grad()
         self.discount_factor = 0.99
 
     def forward_train(self, observation):
@@ -39,6 +39,23 @@ class Reinforce:
         self.rewards.append(reward)
 
     def train_episode(self):
+        returns = self.calculate_returns()
+        loss = []
+        for v, prob in zip(returns, self.probs):
+            loss.append(- v * prob)
+        policy_loss = torch.cat(loss).sum()
+        policy_loss.backward()
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+
+        loss = policy_loss.item() / len(self.probs)
+    
+        self.probs = []
+        self.rewards = []
+
+        return loss
+
+    def calculate_returns(self):
         values = []
         R = 0.0
         for r in self.rewards[::-1]:
@@ -47,16 +64,7 @@ class Reinforce:
         values.reverse()
         values = torch.tensor(values)
         eps = np.finfo(np.float32).eps.item()
-        values = (values - values.mean()) / (values.std() + eps)
-        loss = []
-        for v, prob in zip(values, self.probs):
-            loss.append(- v * prob)
-        policy_loss = torch.cat(loss).sum()
-        policy_loss.backward()
-        self.optimizer.step()
-        self.optimizer.zero_grad()   # zero the gradient buffers
-        self.probs = []
-        self.rewards = []
+        return  (values - values.mean()) / (values.std() + eps)
 
 
 def main():
