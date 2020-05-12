@@ -33,7 +33,7 @@ class ActorCritic:
 
         self.optimizer_policy = optim.Adam(self.policy.parameters(), lr=0.01)
         self.optimizer_policy.zero_grad()
-        self.optimizer_value = optim.Adam(self.policy.parameters(), lr=0.01)
+        self.optimizer_value = optim.Adam(self.value.parameters(), lr=0.01)
         self.optimizer_value.zero_grad()
         self.discount_factor = 0.99
 
@@ -53,19 +53,21 @@ class ActorCritic:
         self.rewards.append(reward)
 
     def train_episode(self):
-        returns = self.calculate_returns()
         policy_loss = []
         action_value_loss = []
         for idx in range(0, len(self.probs)):
             log_prob_action = self.probs[idx]
-            actual_return = returns[idx]
             estimated_value = self.estimated_values[idx]
+            target_value = self.rewards[idx]
+            try:
+                target_value += self.discount_factor * self.estimated_values[idx + 1].item()
+            except:
+                pass
+            target_value = torch.tensor(target_value)
 
-            advantage = actual_return.item() - estimated_value.item()
-            policy_loss.append(-advantage * log_prob_action)
-
-            loss_fn = torch.nn.MSELoss()
-            action_value_loss.append(loss_fn(actual_return.view([1,1]), estimated_value))
+            advantage = target_value - estimated_value
+            policy_loss.append(-advantage.item() * log_prob_action)
+            action_value_loss.append(advantage ** 2)
 
         self.optimizer_policy.zero_grad()
         policy_loss = torch.cat(policy_loss).sum()
