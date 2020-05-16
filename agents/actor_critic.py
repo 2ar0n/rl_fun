@@ -10,23 +10,27 @@ from .common import returns_from
 
 
 class ActorCritic(torch.nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, show_debug_msg: bool = True):
         super(ActorCritic, self).__init__()
 
+        self.show_debug_msg = show_debug_msg
         self.env = env
         observation_size = env.observation_space.shape[0]
-        if type(env.action_space) is gym.spaces.discrete.Discrete:
-            control_size = int(env.action_space.n)
-        else:
-            control_size = env.action_space.shape[0]
-            raise NotImplemented("Continuous action spaces not yet supported")
+
+        self.action_space_is_discrete = type(env.action_space) is gym.spaces.discrete.Discrete
+        control_size = int(env.action_space.n) if self.action_space_is_discrete else env.action_space.shape[0]
 
         self.lay1 = torch.nn.Linear(observation_size, 50)
         self.act1 = torch.nn.ReLU()
         self.lay2 = torch.nn.Linear(50, 30)
         self.act2 = torch.nn.ReLU()
-        self.policy_head = torch.nn.Linear(30, control_size)
-        self.policy_act = torch.nn.Softmax(dim=1)
+        if self.action_space_is_discrete:
+            self.policy_head = torch.nn.Linear(30, control_size)
+            self.policy_act = torch.nn.Softmax(dim=1)
+        else:
+            self.policy_mean_head = torch.nn.Linear(30, control_size)
+            self.policy_std_head = torch.nn.Linear(30, control_size)
+            self.policy_std_act = torch.nn.Softplus()
         self.value_head = torch.nn.Linear(30, 1)
         self.value_act = torch.nn.Tanh()
 
@@ -37,11 +41,14 @@ class ActorCritic(torch.nn.Module):
         self.optimizer.zero_grad()
 
     def forward(self, x: torch.tensor) -> typing.Tuple[torch.Tensor, torch.Tensor]:
-        x = self.lay1(x)
-        x = self.act1(x)
-        x = self.lay2(x)
-        x = self.act2(x)
-        action = self.policy_act(self.policy_head(x))
+        x = self.act1(self.lay1(x))
+        x = self.act2(self.lay2(x))
+        if self.action_space_is_discrete:
+            action = self.policy_act(self.policy_head(x))
+        else:
+            action_mean = self.policy_mean_head(x)
+            action_std = self.policy_std_act(self.policy_std_head(x)) + 0.01
+            action = torch.cat((action_mean, action_std), dim=1)
         value = self.value_act(self.value_head(x))
         return action, value
 
@@ -62,9 +69,19 @@ class ActorCritic(torch.nn.Module):
             for t in itertools.count(episode_steps):
                 action, value = self.forward(torch.from_numpy(observation).float().unsqueeze(0))
                 
-                action_distribution = torch.distributions.Categorical(action)
-                sampled_action = action_distribution.sample()
-                observation, reward, done, _ = self.env.step(sampled_action.item())
+                if self.action_space_is_discrete:
+                    action_distribution = torch.distributions.Categorical(action)
+                    sampled_action = action_distribution.sample()
+                    final_action = sampled_action.item()
+                else:
+                    control_size = int(action.size(1) / 2)
+                    mean = action[0,0:control_size]
+                    std = action[0,control_size:control_size*2]
+                    action_distribution = torch.distributions.normal.Normal(mean, std)
+                    sampled_action = action_distribution.sample()
+                    final_action = sampled_action.numpy()
+
+                observation, reward, done, _ = self.env.step(final_action)
 
                 episode_log_probabilities.append(action_distribution.log_prob(sampled_action))
                 episode_estimated_values.append(value)
@@ -91,10 +108,11 @@ class ActorCritic(torch.nn.Module):
 
                 self.optimizer.step()
 
-                mean_reward = round(torch.tensor(total_episode_rewards).mean().item(), 1)
-                median_reward = round(torch.tensor(total_episode_rewards).median().item(), 1)
-                percentage = round(ep / episodes * 100, 1)
-                print(f"Progress: {percentage}%. Batch loss: {batch_loss}. Episode rewards (mean/median): {mean_reward}/{median_reward}.")
+                if self.show_debug_msg:
+                    mean_reward = round(torch.tensor(total_episode_rewards).mean().item(), 1)
+                    median_reward = round(torch.tensor(total_episode_rewards).median().item(), 1)
+                    percentage = round(ep / episodes * 100, 1)
+                    print(f"Progress: {percentage}%. Batch loss: {batch_loss}. Episode rewards (mean/median): {mean_reward}/{median_reward}.")
                 total_episode_rewards = []
                 policy_losses = []
                 value_losses = []
