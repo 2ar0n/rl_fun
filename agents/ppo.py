@@ -47,6 +47,10 @@ class PPO(torch.nn.Module):
         value = self.value_act(self.value_head(x))
         return action, value
 
+    def act(self, x: np.ndarray):
+        action, _ = self.forward(torch.from_numpy(x).float().unsqueeze(0))
+        return action.argmax().item()
+
     def train(self, episodes: int, batch_size: int, episode_steps: int = 1000):
         number_batches = episodes // batch_size
         for batch_idx in range(number_batches):

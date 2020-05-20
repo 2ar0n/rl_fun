@@ -43,6 +43,10 @@ class Reinforce(torch.nn.Module):
         x = self.act3(x)
         return x
 
+    def act(self, x: np.ndarray):
+        action, _ = self.forward(torch.from_numpy(x).float().unsqueeze(0))
+        return action.argmax().item()
+
     def train(self, episodes: int, batch_size: int, episode_steps: int = 1000):
         policy_losses = []
         total_episode_rewards = []
