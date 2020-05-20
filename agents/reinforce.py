@@ -6,6 +6,8 @@ import numpy as np
 import gym
 import torch
 
+from .common import returns_from
+
 
 class Reinforce(torch.nn.Module):
     def __init__(self, env):
@@ -16,8 +18,8 @@ class Reinforce(torch.nn.Module):
         if type(env.action_space) is gym.spaces.discrete.Discrete:
             control_size = int(env.action_space.n)
         else:
-            #TODO(continuous aciton space not supported)
             control_size = env.action_space.shape[0]
+            raise NotImplemented("Continuous action spaces not yet supported")
 
         self.lay1 = torch.nn.Linear(observation_size, 50)
         self.act1 = torch.nn.ReLU()
@@ -41,6 +43,10 @@ class Reinforce(torch.nn.Module):
         x = self.act3(x)
         return x
 
+    def act(self, x: np.ndarray):
+        action, _ = self.forward(torch.from_numpy(x).float().unsqueeze(0))
+        return action.argmax().item()
+
     def train(self, episodes: int, batch_size: int, episode_steps: int = 1000):
         policy_losses = []
         total_episode_rewards = []
@@ -60,7 +66,7 @@ class Reinforce(torch.nn.Module):
                 episode_rewards.append(reward)
 
                 if done:
-                    returns = self.returns_from(episode_rewards)
+                    returns = returns_from(episode_rewards, self.discount_factor)
                     for ret, log_prob in zip(returns, episode_log_probabilities):
                         advantage = ret
                         policy_losses.append(-advantage * log_prob)
@@ -83,17 +89,3 @@ class Reinforce(torch.nn.Module):
                 total_episode_rewards = []
                 policy_losses = []
 
-    def returns_from(self, rewards: typing.List[float]) -> typing.List[float]:
-        R = 0.0
-        returns = []
-        for r in rewards[::-1]:
-            R = R * self.discount_factor + r
-            returns.append(R)
-        returns.reverse()
-        return self.normalize(returns)
-
-
-    def normalize(self, values: typing.List[float]) -> typing.List[float]:
-        values = torch.tensor(values)
-        values = (values - values.mean()) / (values.std() + 1e-8)
-        return values.tolist()
