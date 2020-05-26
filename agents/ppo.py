@@ -15,11 +15,10 @@ class PPO(torch.nn.Module):
 
         self.env = env
         observation_size = env.observation_space.shape[0]
-        if type(env.action_space) is gym.spaces.discrete.Discrete:
-            control_size = int(env.action_space.n)
-        else:
-            control_size = env.action_space.shape[0]
-            raise NotImplemented("Continuous action spaces not yet supported")
+
+        if type(env.action_space) is not gym.spaces.discrete.Discrete:
+            raise NotImplemented("Continuous action spaces not supported")
+        control_size = int(env.action_space.n)
 
         self.lay1 = torch.nn.Linear(observation_size, 50)
         self.act1 = torch.nn.ReLU()

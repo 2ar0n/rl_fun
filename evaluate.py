@@ -20,15 +20,7 @@ except:
     print(f"Could not find env {args.env}")
     sys.exit(1)
 
-if args.agent == "reinforce":
-    agent = agents.Reinforce(env)
-elif args.agent == "actor-critic":
-    agent = agents.ActorCritic(env)
-elif args.agent == "ppo":
-    agent = agents.PPO(env)
-else:
-    print(f"Agent type {args.agent} not found")
-    sys.exit(1)
+agent = agents.create_agent(args.agent, env)
 
 try:
     agent.load_state_dict(torch.load(args.model_weight))
