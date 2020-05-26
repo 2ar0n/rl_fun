@@ -1,5 +1,7 @@
 # RL fun
 
+This repository is yet another one dedicated to the implementation of various reinforcement learning algorithm for didactic purpose. It is designed around OpenAIs gym environment.
+
 # Dependencies
 
 - pytorch
